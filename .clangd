@@ -1,0 +1,9 @@
+CompileFlags:
+  Compiler: gcc
+  Add:
+    [
+      -std=c99,
+      -xc,
+      -Wall,
+    ]
+  
