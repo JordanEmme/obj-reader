@@ -90,6 +90,6 @@ typedef struct ObjReader_Return {
     ObjReader_Mesh mesh;
 } ObjReader_Return;
 
-ObjReader_Return read_obj(const char *path);
+extern ObjReader_Return read_obj(const char *path);
 
 #endif  // OBJ_READER_H
