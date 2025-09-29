@@ -1,5 +1,19 @@
 /**************************************************************************************************
- * Obj reader
+ * Obj Reader
+ *
+ * File: obj_reader.h
+ *
+ * Author: Jordan Emme
+ *
+ * Description: A minimal library that enables reading wavefront (.obj) files.
+ *
+ *    This is a tiny helper which only enables parsing through the file to hold what is essentially
+ * a binary representation of it, and which should be easier to work with/get started. Any
+ * re-ordering of the data, such as storing vertices in their own structs/classes using things like
+ * float3s or vec3s is left for the user to do. 
+ *    Currently, only vertex positions, normals, texture coordinates and faces are supported, and
+ * only if the .obj doesn't use relative indices. The author is planning to support groups, objects
+ * material declaration and usage, and lines.
  *
  * Copyright (c) 2025 Jordan Emme
  *
@@ -46,15 +60,21 @@
  * @nFaces: number of faces in the mesh
  * @flatFacesSize: size of the flattened faces array 
  */
-typedef struct ObjReader_MeshSizes {
+typedef struct ObjRdr_MeshSizes {
     uint32_t nPos;
     uint32_t nNorms;
     uint32_t nTex;
     uint32_t nFaces;
     uint32_t flatFacesSize;
-} ObjReader_MeshSizes;
+} ObjRdr_MeshSizes;
 
-typedef struct ObjReader_MeshData {
+typedef struct ObjRdr_VertIdx {
+    int32_t posIdx;
+    int32_t normIdx;
+    int32_t texIdx;
+} ObjRdr_VertIdx;
+
+typedef struct ObjRdr_MeshData {
     // Vertex position data
     float *posX;
     float *posY;
@@ -71,25 +91,23 @@ typedef struct ObjReader_MeshData {
     float *texV;
 
     // Polygon vertices
-    uint32_t *facePosIdx;
-    uint32_t *faceNormIdx;
-    uint32_t *faceTexIdx;
+    ObjRdr_VertIdx *faces;
 
     // Faces offsets in previous 3 datasets
     uint32_t *faceSizes;
 
-} ObjReader_MeshData;
+} ObjRdr_MeshData;
 
 typedef struct ObjReader_Mesh {
-    ObjReader_MeshSizes sizes;
-    ObjReader_MeshData data;
-} ObjReader_Mesh;
+    ObjRdr_MeshSizes sizes;
+    ObjRdr_MeshData data;
+} ObjRdr_Mesh;
 
-typedef struct ObjReader_Return {
+typedef struct ObjRdr_Return {
     bool successfulRead;
-    ObjReader_Mesh mesh;
-} ObjReader_Return;
+    ObjRdr_Mesh mesh;
+} ObjRdr_Return;
 
-extern ObjReader_Return read_obj(const char *path);
+extern ObjRdr_Return read_obj(const char *path);
 
 #endif  // OBJ_READER_H
