@@ -36,38 +36,47 @@
  * Includes
  *************************************************************************************************/
 
-#include "obj-reader.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "obj-reader.h"
 
 /**************************************************************************************************
  * Macros
  *************************************************************************************************/
 
 #define MAX_LINE_LEN (65535)
-#define NUM_LINE_TYPES (12)
+
+#define FREE(A) \
+    { \
+        if (A) { \
+            free(A); \
+        } \
+    }
 
 /**************************************************************************************************
  * Enums
  *************************************************************************************************/
 
-typedef enum ObjRdr_LineType {
-    OBJ_RDR_COMMENT = 0,
-    OBJ_RDR_VECPOS = 1,
-    OBJ_RDR_VECTEXT = 2,
-    OBJ_RDR_VECNORM = 3,
-    OBJ_RDR_VECPARAM = 4,
-    OBJ_RDR_FACE = 5,
-    OBJ_RDR_LINE = 6,
-    OBJ_RDR_MTLSPEC = 7,
-    OBJ_RDR_MTLUSE = 8,
-    OBJ_RDR_OBJECT = 9,
-    OBJ_RDR_GROUP = 10,
-    OBJ_RDR_SSHADING = 11,
-    OBJ_RDR_DEFAULT = 12,
-} ObjRdr_LineType;
+typedef enum Obj_LineType {
+    OBJ_COMMENT  = 0,
+    OBJ_VECPOS   = 1,
+    OBJ_VECTEXT  = 2,
+    OBJ_VECNORM  = 3,
+    OBJ_VECPARAM = 4,
+    OBJ_FACE     = 5,
+    OBJ_LINE     = 6,
+    OBJ_MTLSPEC  = 7,
+    OBJ_MTLUSE   = 8,
+    OBJ_OBJECT   = 9,
+    OBJ_GROUP    = 10,
+    OBJ_SSHADING = 11,
+
+    OBJ_NUM_LINE_TYPES,
+    OBJ_INVALID_LINE,
+} Obj_LineType;
 
 /**************************************************************************************************
  * Structs
@@ -77,19 +86,19 @@ typedef enum ObjRdr_LineType {
  * Constants
  *************************************************************************************************/
 
-static const char *const LINE_SPEC[NUM_LINE_TYPES] = {
-    [OBJ_RDR_COMMENT] = "# ",
-    [OBJ_RDR_VECPOS] = "v ",
-    [OBJ_RDR_VECTEXT] = "vt ",
-    [OBJ_RDR_VECNORM] = "vn ",
-    [OBJ_RDR_VECPARAM] = "vp ",
-    [OBJ_RDR_FACE] = "f ",
-    [OBJ_RDR_LINE] = "l ",
-    [OBJ_RDR_MTLSPEC] = "mtllib ",
-    [OBJ_RDR_MTLUSE] = "usemtl ",
-    [OBJ_RDR_OBJECT] = "o ",
-    [OBJ_RDR_GROUP] = "g ",
-    [OBJ_RDR_SSHADING] = "s ",
+static const char *const LINE_SPEC[OBJ_NUM_LINE_TYPES] = {
+    [OBJ_COMMENT]  = "# ",
+    [OBJ_VECPOS]   = "v ",
+    [OBJ_VECTEXT]  = "vt ",
+    [OBJ_VECNORM]  = "vn ",
+    [OBJ_VECPARAM] = "vp ",
+    [OBJ_FACE]     = "f ",
+    [OBJ_LINE]     = "l ",
+    [OBJ_MTLSPEC]  = "mtllib ",
+    [OBJ_MTLUSE]   = "usemtl ",
+    [OBJ_OBJECT]   = "o ",
+    [OBJ_GROUP]    = "g ",
+    [OBJ_SSHADING] = "s ",
 };
 
 /**************************************************************************************************
@@ -97,6 +106,7 @@ static const char *const LINE_SPEC[NUM_LINE_TYPES] = {
  *************************************************************************************************/
 
 static const char *currentPath;
+
 static char lineBuff[MAX_LINE_LEN];
 
 /**************************************************************************************************
@@ -115,20 +125,15 @@ static uint32_t strlen_s(const char *s) {
 }
 
 static bool str_endswith(const char *s, const char *suff) {
-    uint32_t sLen = strlen_s(s);
+    uint32_t sLen    = strlen_s(s);
     uint32_t suffLen = strlen_s(suff);
 
     return (sLen >= suffLen && strncmp(s + sLen - suffLen, suff, suffLen) == 0);
 }
 
 static const bool try_open_obj(FILE **fptr_p) {
-    if (!str_endswith(currentPath, ".obj")) {
-        fprintf(
-            stderr,
-            "Error, trying to read file %s:\n\
-                not an .obj file",
-            currentPath
-        );
+    if (!str_endswith(currentPath, ".obj") && !str_endswith(currentPath, ".OBJ")) {
+        fprintf(stderr, "Error, trying to read file %s:\n Not an .obj file\n", currentPath);
         return false;
     }
 
@@ -137,62 +142,63 @@ static const bool try_open_obj(FILE **fptr_p) {
     *fptr_p = fopen(currentPath, "r");
 
     if (!*fptr_p) {
-        fprintf(
-            stderr,
-            "Error, trying to read file %s:\n\
-                Could not open the file.",
-            currentPath
-        );
+        fprintf(stderr, "Error, trying to read file %s:\n Could not open the file.", currentPath);
         return false;
     }
 
     return true;
 }
 
-static ObjRdr_LineType get_line_type() {
-    for (int i = 0; i < NUM_LINE_TYPES; ++i) {
+static Obj_LineType get_line_type() {
+    for (int i = 0; i < OBJ_NUM_LINE_TYPES; ++i) {
         if (strncmp(lineBuff, LINE_SPEC[i], strlen(LINE_SPEC[i])) == 0) {
-            return (ObjRdr_LineType)i;
+            return (Obj_LineType)i;
         }
     }
-    return OBJ_RDR_DEFAULT;
+    return OBJ_INVALID_LINE;
 }
 
-static uint32_t get_num_verts() {
-    // TODO
-}
+static Obj_MeshSizes get_sizes(FILE *fptr) {
+    Obj_MeshSizes sizes = {0u, 0u, 0u, 0u, 0u};
 
-static ObjRdr_MeshSizes get_sizes(FILE *fptr) {
-    ObjRdr_MeshSizes sizes = {0, 0, 0, 0, 0};
+    uint32_t lineNum = 0u;
 
     while (fgets(lineBuff, MAX_LINE_LEN, fptr)) {
-        ObjRdr_LineType lineType = get_line_type();
+        ++lineNum;
+        Obj_LineType lineType = get_line_type();
         switch (lineType) {
-            case OBJ_RDR_COMMENT:
+            case OBJ_COMMENT:
                 break;
-            case OBJ_RDR_VECPOS:
+            case OBJ_VECPOS:
                 ++sizes.nPos;
                 break;
-            case OBJ_RDR_VECTEXT:
+            case OBJ_VECTEXT:
                 ++sizes.nTex;
                 break;
-            case OBJ_RDR_VECNORM:
+            case OBJ_VECNORM:
                 ++sizes.nNorms;
                 break;
-            case OBJ_RDR_FACE:
+            case OBJ_FACE:
                 ++sizes.nFaces;
-                sizes.flatFacesSize = get_num_verts();
 
+                // TODO: Assumes there is no double space or trailing spaces before the newline, should make it
+                // more robust
+                for (int i = 0; i < strlen(lineBuff); ++i) {
+                    sizes.flatFacesSize += lineBuff[i] == ' ';
+                }
+                break;
+            case OBJ_INVALID_LINE:
+                fprintf(stderr, "Error: line %d is not recognized:\n > %s", lineNum, lineBuff);
             // currently unsupported
             // TODO: extend support to objects and groups first, then materials
-            case OBJ_RDR_VECPARAM:
-            case OBJ_RDR_LINE:
-            case OBJ_RDR_MTLSPEC:
-            case OBJ_RDR_MTLUSE:
-            case OBJ_RDR_OBJECT:
-            case OBJ_RDR_GROUP:
-            case OBJ_RDR_SSHADING:
-            case OBJ_RDR_DEFAULT:
+            case OBJ_VECPARAM:
+            case OBJ_LINE:
+            case OBJ_MTLSPEC:
+            case OBJ_MTLUSE:
+            case OBJ_OBJECT:
+            case OBJ_GROUP:
+            case OBJ_SSHADING:
+            default:
                 break;
         }
     }
@@ -200,7 +206,7 @@ static ObjRdr_MeshSizes get_sizes(FILE *fptr) {
     return sizes;
 }
 
-static bool alloc_mesh_data(ObjRdr_MeshData *data, ObjRdr_MeshSizes sizes) {
+static bool alloc_mesh_data(Obj_MeshData *data, Obj_MeshSizes sizes) {
     // Vertex position data
     data->posX = malloc(sizes.nPos * sizeof(*data->posX));
     data->posY = malloc(sizes.nPos * sizeof(*data->posY));
@@ -265,10 +271,99 @@ static bool alloc_mesh_data(ObjRdr_MeshData *data, ObjRdr_MeshSizes sizes) {
     return data;
 }
 
-static ObjRdr_MeshData get_data(FILE *fptr, ObjRdr_MeshSizes sizes) {
-    ObjRdr_MeshData data;
+static Obj_MeshData try_get_data(FILE *fptr, Obj_MeshSizes sizes, bool *successfulRead) {
+    Obj_MeshData data;
     alloc_mesh_data(&data, sizes);
 
+    uint32_t posIdx  = 0u;
+    uint32_t normIdx = 0u;
+    uint32_t textIdx = 0u;
+    uint32_t faceIdx = 0u;
+
+    uint32_t lineNum = 0u;
+
+    while (fgets(lineBuff, MAX_LINE_LEN, fptr)) {
+        ++lineNum;
+        switch (get_line_type()) {
+            case OBJ_VECPOS:
+                if (sscanf(
+                        lineBuff,
+                        "v %f %f %f",
+                        data.posX + posIdx,
+                        data.posY + posIdx,
+                        data.posZ + posIdx
+                    )) {
+                    data.posW[posIdx] = 1.0f;
+                    ++posIdx;
+                } else if (sscanf(
+                               lineBuff,
+                               "v %f %f %f %f",
+                               data.posX + posIdx,
+                               data.posY + posIdx,
+                               data.posZ + posIdx,
+                               data.posW + posIdx
+                           )) {
+                    ++posIdx;
+                } else {
+                    fprintf(
+                        stderr,
+                        "Error, line %d, vector position line in invalid format:\n > %s",
+                        lineNum,
+                        lineBuff
+                    );
+                    return data;
+                }
+                break;
+            case OBJ_VECNORM:
+                if (sscanf(
+                        lineBuff,
+                        "vn %f %f %f",
+                        data.normX + normIdx,
+                        data.normY + normIdx,
+                        data.normZ + normIdx
+                    )) {
+                    ++normIdx;
+                } else {
+                    fprintf(
+                        stderr,
+                        "Error, line %d, vector normal line in invalid format:\n > %s",
+                        lineNum,
+                        lineBuff
+                    );
+                    return data;
+                }
+                break;
+            case OBJ_VECTEXT:
+                if (sscanf(lineBuff, "vt %f %f", data.texU + textIdx, data.texV + textIdx)) {
+                    ++textIdx;
+                } else {
+                    fprintf(
+                        stderr,
+                        "Error, line %d, vector texture coordinates line in invalid format:\n > %s",
+                        lineNum,
+                        lineBuff
+                    );
+                    return data;
+                }
+                break;
+            case OBJ_FACE:
+
+                parse_face(&data);
+                break;
+            case OBJ_COMMENT:
+            case OBJ_VECPARAM:
+            case OBJ_LINE:
+            case OBJ_MTLSPEC:
+            case OBJ_MTLUSE:
+            case OBJ_OBJECT:
+            case OBJ_GROUP:
+            case OBJ_SSHADING:
+            case OBJ_INVALID_LINE:
+            default:
+                break;
+        }
+    }
+    *successfulRead = true;
     return data;
 }
 
@@ -276,19 +371,43 @@ static ObjRdr_MeshData get_data(FILE *fptr, ObjRdr_MeshSizes sizes) {
  * Public methods
  *************************************************************************************************/
 
-ObjRdr_Return read_obj(const char *path) {
+void obj_free(Obj_Mesh *mesh) {
+    FREE(mesh->data.posX);
+    FREE(mesh->data.posY);
+    FREE(mesh->data.posZ);
+    FREE(mesh->data.posW);
+    FREE(mesh->data.normX);
+    FREE(mesh->data.normY);
+    FREE(mesh->data.normZ);
+    FREE(mesh->data.texU);
+    FREE(mesh->data.texV);
+    FREE(mesh->data.faces);
+    FREE(mesh->data.faceSizes);
+}
+
+Obj_Return obj_read(const char *path) {
     // TODO: sanitise path (trim if too long and remove %p and other known attacks)
     currentPath = path;
 
-    ObjRdr_Mesh mesh = {};
+    Obj_Mesh mesh = {};
 
     FILE *fptr;
     if (!try_open_obj(&fptr)) {
-        return (ObjRdr_Return) {false, mesh};
+        return (Obj_Return) {false, mesh};
     }
 
-    mesh.sizes = get_sizes(fptr);
-    mesh.data = get_data(fptr, mesh.sizes);
+    fprintf(stdout, "Opened obj file %s for reading\n", currentPath);
 
-    return (ObjRdr_Return) {true, mesh};
+    mesh.sizes = get_sizes(fptr);
+    rewind(fptr);
+
+    bool successfulRead = false;
+
+    mesh.data = try_get_data(fptr, mesh.sizes, &successfulRead);
+    fclose(fptr);
+    if (!successfulRead) {
+        fprintf(stderr, "Error while reading the obj file, aborting the operation.");
+    }
+
+    return (Obj_Return) {successfulRead, mesh};
 }

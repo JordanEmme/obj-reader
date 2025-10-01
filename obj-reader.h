@@ -60,21 +60,21 @@
  * @nFaces: number of faces in the mesh
  * @flatFacesSize: size of the flattened faces array 
  */
-typedef struct ObjRdr_MeshSizes {
+typedef struct Obj_MeshSizes {
     uint32_t nPos;
     uint32_t nNorms;
     uint32_t nTex;
     uint32_t nFaces;
     uint32_t flatFacesSize;
-} ObjRdr_MeshSizes;
+} Obj_MeshSizes;
 
-typedef struct ObjRdr_VertIdx {
+typedef struct Obj_VertIdx {
     int32_t posIdx;
     int32_t normIdx;
     int32_t texIdx;
-} ObjRdr_VertIdx;
+} Obj_VertIdx;
 
-typedef struct ObjRdr_MeshData {
+typedef struct Obj_MeshData {
     // Vertex position data
     float *posX;
     float *posY;
@@ -91,23 +91,24 @@ typedef struct ObjRdr_MeshData {
     float *texV;
 
     // Polygon vertices
-    ObjRdr_VertIdx *faces;
+    Obj_VertIdx *faces;
 
     // Faces offsets in previous 3 datasets
     uint32_t *faceSizes;
 
-} ObjRdr_MeshData;
+} Obj_MeshData;
 
-typedef struct ObjReader_Mesh {
-    ObjRdr_MeshSizes sizes;
-    ObjRdr_MeshData data;
-} ObjRdr_Mesh;
+typedef struct Obj_Mesh {
+    Obj_MeshSizes sizes;
+    Obj_MeshData  data;
+} Obj_Mesh;
 
-typedef struct ObjRdr_Return {
-    bool successfulRead;
-    ObjRdr_Mesh mesh;
-} ObjRdr_Return;
+typedef struct Obj_Return {
+    bool     successfulRead;
+    Obj_Mesh mesh;
+} Obj_Return;
 
-extern ObjRdr_Return read_obj(const char *path);
+extern Obj_Return obj_read(const char *path);
+extern void       obj_free(Obj_Mesh *mesh);
 
 #endif  // OBJ_READER_H
