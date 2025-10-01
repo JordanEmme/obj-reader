@@ -1,10 +1,10 @@
 AccessModifierOffset: -2
 AlignAfterOpenBracket: BlockIndent    # New in v14. For earlier clang-format versions, use AlwaysBreak instead.
-AlignConsecutiveMacros: false
-AlignConsecutiveAssignments: false
-AlignConsecutiveDeclarations: false
+AlignConsecutiveMacros: true
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
 AlignEscapedNewlines: DontAlign
-AlignOperands: false
+AlignOperands: true
 AlignTrailingComments: false
 AllowAllArgumentsOnNextLine: false
 AllowAllConstructorInitializersOnNextLine: false
