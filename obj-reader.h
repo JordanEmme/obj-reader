@@ -99,6 +99,7 @@ typedef struct Obj_MeshData {
 } Obj_MeshData;
 
 typedef struct Obj_Mesh {
+    bool          isValid;
     Obj_MeshSizes sizes;
     Obj_MeshData  data;
 } Obj_Mesh;

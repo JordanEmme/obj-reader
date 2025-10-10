@@ -30,7 +30,7 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
-*************************************************************************************************/
+ *************************************************************************************************/
 
 /**************************************************************************************************
  * Includes
@@ -78,6 +78,16 @@ typedef enum Obj_LineType {
     OBJ_INVALID_LINE,
 } Obj_LineType;
 
+typedef enum Obj_FaceType {
+    OBJ_POS_ONLY         = 0,
+    OBJ_POS_AND_TEX      = 1,
+    OBJ_POS_AND_NORM     = 2,
+    OBJ_POS_TEX_AND_NORM = 3,
+
+    OBJ_NUM_FACE_TYPES,
+    OBJ_INVALID_FACE,
+} Obj_FaceType;
+
 /**************************************************************************************************
  * Structs
  *************************************************************************************************/
@@ -99,6 +109,13 @@ static const char *const LINE_SPEC[OBJ_NUM_LINE_TYPES] = {
     [OBJ_OBJECT]   = "o ",
     [OBJ_GROUP]    = "g ",
     [OBJ_SSHADING] = "s ",
+};
+
+static const char *const FACE_INDEX_FORMAT[OBJ_NUM_FACE_TYPES] = {
+    [OBJ_POS_ONLY]         = "%d",
+    [OBJ_POS_AND_TEX]      = "%d/%d",
+    [OBJ_POS_AND_NORM]     = "%d//%d",
+    [OBJ_POS_TEX_AND_NORM] = "%d/%d/%d",
 };
 
 /**************************************************************************************************
@@ -271,6 +288,70 @@ static bool alloc_mesh_data(Obj_MeshData *data, Obj_MeshSizes sizes) {
     return data;
 }
 
+static Obj_FaceType determine_face_type() {
+    //TODO: make this robust to contiguous whitespaces, and make it detect invalid formats
+    int  i = 2;  // ignore 'f' and first space start from first digit
+    char c;
+    bool justParsedSlash = false;
+    bool parsedSlash     = false;
+
+    while (lineBuff[i] != ' ') {
+        c = lineBuff[i];
+        if (c - '0' < 10) {
+            justParsedSlash = false;
+            continue;
+        } else if (c == '/') {
+            if (justParsedSlash) {
+                return OBJ_POS_AND_NORM;
+            } else if (parsedSlash) {
+                return OBJ_POS_TEX_AND_NORM;
+            }
+            parsedSlash     = true;
+            justParsedSlash = true;
+        }
+        ++i;
+    }
+    return parsedSlash ? OBJ_POS_AND_TEX : OBJ_POS_ONLY;
+}
+
+static uint32_t parse_face(Obj_MeshData *data, uint32_t faceVtxIdx) {
+    // Determine if only pos, pos and norm, pos and text, or all three
+    Obj_FaceType faceType   = determine_face_type();
+    const char  *faceFormat = FACE_INDEX_FORMAT[faceType];
+
+    uint32_t numVertices = 0u;
+    int32_t  posIdx      = -1;
+    int32_t  normIdx     = -1;
+    int32_t  texIdx      = -1;
+
+    char *intBuff = strtok(lineBuff + 2, " ");
+    while (intBuff) {
+        switch (faceType) {
+            case OBJ_POS_ONLY:
+                sscanf(intBuff, faceFormat, &posIdx);
+                break;
+            case OBJ_POS_AND_TEX:
+                sscanf(intBuff, faceFormat, &posIdx, &texIdx);
+                break;
+            case OBJ_POS_AND_NORM:
+                sscanf(intBuff, faceFormat, &posIdx, &normIdx);
+                break;
+            case OBJ_POS_TEX_AND_NORM:
+                sscanf(intBuff, faceFormat, &posIdx, &texIdx, &normIdx);
+                break;
+            case OBJ_INVALID_FACE:
+            default:
+                fprintf(stderr, "Error parsing face n%d", faceVtxIdx);
+                return 0;
+        }
+        data->faces[faceVtxIdx + numVertices].posIdx  = posIdx;
+        data->faces[faceVtxIdx + numVertices].texIdx  = texIdx;
+        data->faces[faceVtxIdx + numVertices].normIdx = normIdx;
+        ++numVertices;
+    }
+    return numVertices;
+}
+
 static Obj_MeshData try_get_data(FILE *fptr, Obj_MeshSizes sizes, bool *successfulRead) {
     Obj_MeshData data;
     alloc_mesh_data(&data, sizes);
@@ -278,7 +359,10 @@ static Obj_MeshData try_get_data(FILE *fptr, Obj_MeshSizes sizes, bool *successf
     uint32_t posIdx  = 0u;
     uint32_t normIdx = 0u;
     uint32_t textIdx = 0u;
-    uint32_t faceIdx = 0u;
+
+    uint32_t faceVtxIdx  = 0u;
+    uint32_t faceIdx     = 0u;
+    uint32_t numVertices = 0u;
 
     uint32_t lineNum = 0u;
 
@@ -347,9 +431,19 @@ static Obj_MeshData try_get_data(FILE *fptr, Obj_MeshSizes sizes, bool *successf
                 }
                 break;
             case OBJ_FACE:
+                numVertices = parse_face(&data, faceVtxIdx);
 
-                parse_face(&data);
+                if (numVertices < 3) {
+                    fprintf(
+                        stderr,
+                        "Error, obj file %s contains a face with fewer than 3 vertices",
+                        currentPath
+                    );
+                }
+                data.faceSizes[faceIdx++] = numVertices;
+                faceVtxIdx += numVertices;
                 break;
+
             case OBJ_COMMENT:
             case OBJ_VECPARAM:
             case OBJ_LINE:
